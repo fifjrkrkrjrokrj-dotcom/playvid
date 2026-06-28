@@ -85,6 +85,9 @@ async def play_video(chat_id: int, state: queue_manager.PlaybackState, bot_clien
         joined_successfully = True
     except Exception as add_err:
         print(f"Failed to add assistant directly: {add_err}. Trying invite link join...")
+        if "USER_ALREADY_PARTICIPANT" in str(add_err):
+            joined_successfully = True
+            print("Assistant is already a participant of the group (direct add).")
         
     # 2. If direct adding fails, try joining via invite link
     if not joined_successfully:
@@ -92,20 +95,35 @@ async def play_video(chat_id: int, state: queue_manager.PlaybackState, bot_clien
             # Export group's primary invite link
             invite_link = await bot_client.export_chat_invite_link(chat_id)
             if invite_link:
-                await assistant_app.join_chat(invite_link)
-                joined_successfully = True
-                print("Assistant successfully joined the group via invite link!")
-        except Exception as link_err:
-            print(f"Failed to join assistant via primary invite link: {link_err}. Trying to create a new link...")
-            # Fallback: Try to create a new invite link
-            try:
-                chat_invite = await bot_client.create_chat_invite_link(chat_id)
-                if chat_invite and chat_invite.invite_link:
-                    await assistant_app.join_chat(chat_invite.invite_link)
+                try:
+                    await assistant_app.join_chat(invite_link)
                     joined_successfully = True
-                    print("Assistant successfully joined the group via newly created invite link!")
-            except Exception as create_err:
-                print(f"Failed to join assistant via new invite link: {create_err}")
+                    print("Assistant successfully joined the group via invite link!")
+                except Exception as join_err:
+                    if "USER_ALREADY_PARTICIPANT" in str(join_err):
+                        joined_successfully = True
+                        print("Assistant is already a participant of the group (primary link join).")
+                    else:
+                        raise join_err
+        except Exception as link_err:
+            if not joined_successfully:
+                print(f"Failed to join assistant via primary invite link: {link_err}. Trying to create a new link...")
+                # Fallback: Try to create a new invite link
+                try:
+                    chat_invite = await bot_client.create_chat_invite_link(chat_id)
+                    if chat_invite and chat_invite.invite_link:
+                        try:
+                            await assistant_app.join_chat(chat_invite.invite_link)
+                            joined_successfully = True
+                            print("Assistant successfully joined the group via newly created invite link!")
+                        except Exception as join_err:
+                            if "USER_ALREADY_PARTICIPANT" in str(join_err):
+                                joined_successfully = True
+                                print("Assistant is already a participant of the group (new link join).")
+                            else:
+                                raise join_err
+                except Exception as create_err:
+                    print(f"Failed to join assistant via new invite link: {create_err}")
 
     # 3. If both failed, notify the user and exit early
     if not joined_successfully:
