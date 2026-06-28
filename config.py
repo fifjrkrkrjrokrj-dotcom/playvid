@@ -9,13 +9,13 @@ API_ID = os.getenv("API_ID")
 API_HASH = os.getenv("API_HASH")
 
 # Bot credentials
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Assistant credentials
 SESSION_STRING = os.getenv("SESSION_STRING")
 
 # Database URI
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/vplay_bot")
+MONGO_URI = os.getenv("MONGO_URI") or os.getenv("MONGODB_URI") or "mongodb://localhost:27017/vplay_bot"
 
 # Server port (Railway dynamically assigns PORT)
 PORT = int(os.getenv("PORT", "27999"))
