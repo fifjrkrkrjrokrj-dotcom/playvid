@@ -16,12 +16,26 @@ async def health_check():
 async def stream_media_file(file_id: str):
     """Streams a Telegram media file chunk-by-chunk on-the-fly to the player."""
     async def chunk_generator():
-        try:
-            # stream_media yields 1MB chunks sequentially from Telegram DC
-            async for chunk in bot_app.stream_media(file_id):
-                yield chunk
-        except Exception as e:
-            print(f"Error in on-the-fly streaming pipeline: {e}")
+        chunk_offset = 0
+        max_retries = 5
+        retry_count = 0
+        
+        while True:
+            try:
+                # stream_media yields 1MB chunks sequentially from Telegram DC
+                async for chunk in bot_app.stream_media(file_id, offset=chunk_offset):
+                    yield chunk
+                    chunk_offset += 1
+                # If we finished yielding all chunks successfully, break the loop
+                break
+            except Exception as e:
+                retry_count += 1
+                print(f"Error in on-the-fly streaming pipeline at chunk {chunk_offset} (attempt {retry_count}/{max_retries}): {e}")
+                if retry_count >= max_retries:
+                    print("Max retries reached in streaming pipeline. Aborting.")
+                    break
+                # Wait briefly before retrying/reconnecting
+                await asyncio.sleep(1)
             
     return StreamingResponse(chunk_generator(), media_type="video/mp4")
 

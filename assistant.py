@@ -170,40 +170,19 @@ async def play_video(chat_id: int, state: queue_manager.PlaybackState, bot_clien
             state.cleanup_local_file()
             return
 
-    # Update dashboard state to "Downloading..."
+    # Update dashboard state to "Loading..."
     if state.active_msg_id and state.user_id:
         try:
             await bot_client.edit_message_text(
                 chat_id=state.user_id,
                 message_id=state.active_msg_id,
-                text=f"📥 **Downloading `{video['name']}` from Telegram...**\n\nThis might take a moment depending on the file size."
+                text=f"📡 **Buffering `{video['name']}`...**\n\nStarting playback instantly."
             )
         except Exception:
             pass
 
-    # Ensure downloads directory exists
-    os.makedirs("downloads", exist_ok=True)
-    local_path = os.path.join("downloads", f"{video['file_unique_id']}.mp4")
-
-    # Clean up previous local file just in case
-    state.cleanup_local_file()
-
-    # Point to the local HTTP streaming port as fallback
-    fallback_url = f"http://127.0.0.1:{config.PORT}/stream/{video['file_id']}"
-    play_path = fallback_url
-
-    # Try downloading to local disk for stable playback on platforms with restricted network latency (like Railway)
-    try:
-        # download_media handles timeouts and retries internally
-        downloaded_file = await bot_client.download_media(
-            message=video['file_id'],
-            file_name=local_path
-        )
-        if downloaded_file and os.path.exists(downloaded_file):
-            state.local_file_path = downloaded_file
-            play_path = downloaded_file
-    except Exception as e:
-        print(f"Failed to download media locally, falling back to on-the-fly stream: {e}")
+    # Point to the local HTTP streaming port (streams Telegram file chunks in memory on-the-fly)
+    play_path = f"http://127.0.0.1:{config.PORT}/stream/{video['file_id']}"
 
     # User Requirement: Assistant leaves the VC before rejoining to avoid voice chat stream glitches
     try:
