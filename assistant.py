@@ -75,30 +75,58 @@ async def play_video(chat_id: int, state: queue_manager.PlaybackState, bot_clien
     state.is_playing = False
     state.is_paused = False
 
-    # Ensure the assistant is in the group chat (bot is admin, so it can invite)
+    # Ensure the assistant is in the group chat (bot is admin, so it can invite/add or use invite link)
+    joined_successfully = False
+    assistant_me = await assistant_app.get_me()
+    
+    # 1. Try to add directly first (fastest)
     try:
-        assistant_me = await assistant_app.get_me()
         await bot_client.add_chat_members(chat_id, assistant_me.id)
-    except Exception as e:
-        print(f"Failed to add assistant to group: {e}")
-        # If it's a privacy restriction, warn the user
-        if "PRIVACY" in str(e).upper() or "RESTRICTED" in str(e).upper() or "USER_PRIVACY_RESTRICTED" in str(e):
-            if state.active_msg_id and state.user_id:
-                try:
-                    await bot_client.send_message(
-                        chat_id=state.user_id,
-                        text=(
-                            f"⚠️ **Assistant Privacy Settings Blocked Bot invite!**\n\n"
-                            f"The assistant account (`@{assistant_me.username or assistant_me.id}`) cannot be added to the group chat by the bot due to Telegram privacy settings.\n\n"
-                            f"**How to fix**:\n"
-                            f"1. Open the assistant account's Telegram app.\n"
-                            f"2. Go to **Settings > Privacy and Security > Groups & Channels**.\n"
-                            f"3. Set **Who can add me to group chats** to **Everybody** (or add your Bot as an exception).\n"
-                            f"4. Alternatively, **manually add the assistant account** (`@{assistant_me.username or assistant_me.id}`) to your group chat."
-                        )
+        joined_successfully = True
+    except Exception as add_err:
+        print(f"Failed to add assistant directly: {add_err}. Trying invite link join...")
+        
+    # 2. If direct adding fails, try joining via invite link
+    if not joined_successfully:
+        try:
+            # Export group's primary invite link
+            invite_link = await bot_client.export_chat_invite_link(chat_id)
+            if invite_link:
+                await assistant_app.join_chat(invite_link)
+                joined_successfully = True
+                print("Assistant successfully joined the group via invite link!")
+        except Exception as link_err:
+            print(f"Failed to join assistant via primary invite link: {link_err}. Trying to create a new link...")
+            # Fallback: Try to create a new invite link
+            try:
+                chat_invite = await bot_client.create_chat_invite_link(chat_id)
+                if chat_invite and chat_invite.invite_link:
+                    await assistant_app.join_chat(chat_invite.invite_link)
+                    joined_successfully = True
+                    print("Assistant successfully joined the group via newly created invite link!")
+            except Exception as create_err:
+                print(f"Failed to join assistant via new invite link: {create_err}")
+
+    # 3. If both failed, notify the user and exit early
+    if not joined_successfully:
+        if state.active_msg_id and state.user_id:
+            try:
+                await bot_client.send_message(
+                    chat_id=state.user_id,
+                    text=(
+                        f"⚠️ **Assistant could not join the group!**\n\n"
+                        f"The bot failed to add the assistant (`@{assistant_me.username or assistant_me.id}`) directly, "
+                        f"and could not join it via invite link.\n\n"
+                        f"**How to fix**:\n"
+                        f"1. Make sure the bot is an **Admin** in the group with **Invite Users / Add Members** permission.\n"
+                        f"2. Open the assistant account's Telegram app and set **Settings > Privacy > Groups** to **Everybody**.\n"
+                        f"3. Alternatively, **manually add** the assistant account (`@{assistant_me.username or assistant_me.id}`) to the group."
                     )
-                except Exception:
-                    pass
+                )
+            except Exception:
+                pass
+        state.cleanup_local_file()
+        return
 
     # Force the assistant client to resolve/cache the group chat details
     try:
