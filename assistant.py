@@ -83,6 +83,12 @@ async def play_video(chat_id: int, state: queue_manager.PlaybackState, bot_clien
         # Ignore if already in group or privacy settings prevent adding
         pass
 
+    # Force the assistant client to resolve/cache the group chat details
+    try:
+        await assistant_app.get_chat(chat_id)
+    except Exception as e:
+        print(f"Error caching group chat details for assistant: {e}")
+
     # Update dashboard state to "Downloading..."
     if state.active_msg_id and state.user_id:
         try:
