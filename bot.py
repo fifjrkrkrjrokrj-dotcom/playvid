@@ -321,7 +321,8 @@ async def group_connect_handler(client: Client, message: Message):
     # Enforce admin restriction
     try:
         member = await client.get_chat_member(message.chat.id, message.from_user.id)
-        if member.status not in ["administrator", "owner"]:
+        status_str = str(member.status).lower()
+        if "admin" not in status_str and "owner" not in status_str and "creator" not in status_str:
             await message.reply(
                 "❌ **Only group administrators can link the bot to their DM dashboard.**",
                 reply_markup=InlineKeyboardMarkup([[
